@@ -27,6 +27,7 @@ export interface Experience {
   startDate: string;
   endDate: string;
   description: string;
+  responsibilities?: string[];
   technologies: string[];
   website?: string;
   projectUrl?: string;

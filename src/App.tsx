@@ -1,22 +1,16 @@
 import { useState } from "react";
-import {
-  certifications,
-  education,
-  experiences,
-  profile,
-  projects,
-  skills,
-  type Project,
-} from "./data/portfolio";
+import type { Project } from "./data/portfolio";
 
 import { Button, Icon, LinkButton, Tag, IconName } from "./components/ui";
 import Admin from "./components/admin/Admin";
+import { PortfolioProvider, usePortfolioContent } from "./context/PortfolioContext";
 
 function SectionHeading({ eyebrow, title, intro }: { eyebrow: string; title: string; intro?: string }) {
   return <div className="section-heading"><span className="eyebrow">{eyebrow}</span><h2>{title}</h2>{intro && <p>{intro}</p>}</div>;
 }
 
 function PublicHeader() {
+  const { content: { profile } } = usePortfolioContent();
   const [open, setOpen] = useState(false);
   const links = ["About", "Experience", "Projects", "Skills", "Education", "Contact"];
   return <header className="site-header">
@@ -33,11 +27,13 @@ function PublicHeader() {
 }
 
 function CvButton({ secondary = false }: { secondary?: boolean }) {
+  const { content: { profile } } = usePortfolioContent();
   if (profile.cv) return <LinkButton href={profile.cv} download variant={secondary ? "secondary" : "primary"} icon="download">Download CV</LinkButton>;
   return <a className={`btn btn-${secondary ? "secondary" : "primary"}`} href={`mailto:${profile.email}?subject=CV request`}><Icon name="download" />Request CV</a>;
 }
 
 function HeroVisual() {
+  const { content: { profile } } = usePortfolioContent();
   return <div className="hero-visual">
     <div className="orb orb-one" /><div className="orb orb-two" />
     <div className="visual-grid" />
@@ -53,7 +49,8 @@ function HeroVisual() {
 function ProjectCard({ project }: { project: Project }) {
   const url = project.demo || project.github || project.caseStudy;
   return <article className="project-card">
-    <div className={`project-art art-${project.order}`}>
+      <div className={`project-art art-${project.order}`}>
+      {project.image && <img className="project-image" src={project.image} alt={`${project.title} preview`} loading="lazy" />}
       <div className="art-window"><span /><span /><span /></div>
       <Icon name={project.category === "Multi-Agent Systems" ? "layers" : project.category === "DevOps & MLOps" ? "grid" : "code"} size={38} />
       <span className="art-label">{project.category}</span>
@@ -62,6 +59,7 @@ function ProjectCard({ project }: { project: Project }) {
       <span className="project-category">{project.category}</span>
       <h3>{project.title}</h3>
       <p>{project.summary}</p>
+      {project.detail && <details className="project-details"><summary>Project details</summary><p>{project.detail}</p></details>}
       <div className="tags">{project.technologies.slice(0, 5).map((tech) => <Tag key={tech}>{tech}</Tag>)}</div>
       <div className="project-actions">
         {url ? <a href={url} target="_blank" rel="noreferrer" className="text-link">View project <Icon name="arrow" /></a> : <span className="text-link is-muted">Case study coming soon</span>}
@@ -72,6 +70,8 @@ function ProjectCard({ project }: { project: Project }) {
 }
 
 function Portfolio() {
+  const { content } = usePortfolioContent();
+  const { profile, projects, experiences, skills, education, certifications } = content;
   const [filter, setFilter] = useState("All");
   const categories = ["All", "Web Development", "AI & Machine Learning", "Multi-Agent Systems", "DevOps & MLOps"];
   const visibleProjects = filter === "All" ? projects : projects.filter((project) => project.category === filter);
@@ -132,6 +132,8 @@ function Portfolio() {
               <div className="experience-card">
                 <div className="experience-top"><div><h3>{experience.role}</h3>{experience.website ? <a href={experience.website} target="_blank" rel="noreferrer">{experience.organization} <Icon name="external" size={14} /></a> : <strong>{experience.organization}</strong>}</div><span><Icon name="location" size={15} />{experience.location}</span></div>
                 <p>{experience.description}</p><div className="tags">{experience.technologies.map((tech) => <Tag key={tech}>{tech}</Tag>)}</div>
+                {experience.responsibilities && experience.responsibilities.length > 0 && <ul className="experience-responsibilities">{experience.responsibilities.map((item) => <li key={item}>{item}</li>)}</ul>}
+                {(experience.website || experience.projectUrl) && <div className="experience-links">{experience.website && <a href={experience.website} target="_blank" rel="noreferrer">Organization website <Icon name="external" size={14} /></a>}{experience.projectUrl && <a href={experience.projectUrl} target="_blank" rel="noreferrer">Related project <Icon name="external" size={14} /></a>}</div>}
                 {experience.images && <div className="experience-gallery">
                   {experience.images.map((image, imageIndex) => <figure className={imageIndex === 0 ? "gallery-featured" : ""} key={image.src}>
                     <img src={image.src} alt={image.alt} loading="lazy" />
@@ -188,6 +190,7 @@ function Portfolio() {
 }
 
 function SocialLinks() {
+  const { content: { profile } } = usePortfolioContent();
   return <div className="social-links">
     {profile.github ? <a href={profile.github} aria-label="GitHub"><Icon name="github" /></a> : <span aria-label="GitHub profile not yet linked"><Icon name="github" /></span>}
     {profile.linkedin ? <a href={profile.linkedin} aria-label="LinkedIn"><Icon name="linkedin" /></a> : <span aria-label="LinkedIn profile not yet linked"><Icon name="linkedin" /></span>}
@@ -195,7 +198,11 @@ function SocialLinks() {
 }
 
 
-export default function App() {
+function AppContent() {
   const isAdmin = /^\/admin\/?$/.test(window.location.pathname);
   return isAdmin ? <Admin /> : <Portfolio />;
+}
+
+export default function App() {
+  return <PortfolioProvider><AppContent /></PortfolioProvider>;
 }
