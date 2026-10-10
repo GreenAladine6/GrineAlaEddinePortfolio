@@ -3,6 +3,7 @@ import {
   certifications, education, experiences, Experience, profile, projects, Project, skills,
 } from "../../data/portfolio";
 import { Button, EmptyState, Field, Icon, IconName, Tag, TextareaField } from "../ui";
+import { isAdminAuthConfigured, verifyAdminCredentials } from "../../config/adminAuth";
 
 type AdminPage = "Overview" | "Projects" | "Experience" | "Skills" | "Education" | "Certifications" | "Profile";
 
@@ -14,9 +15,7 @@ function AdminLogin({ onEnter }: { onEnter: () => void }) {
     const values = new FormData(form);
     const email = String(values.get("email") || "").trim();
     const password = String(values.get("password") || "");
-    const expectedEmail = import.meta.env.VITE_ADMIN_EMAIL;
-    const expectedPassword = import.meta.env.VITE_ADMIN_PASSWORD;
-    if (!expectedEmail || !expectedPassword || email !== expectedEmail || password !== expectedPassword) return setError(true);
+    if (!verifyAdminCredentials(email, password)) return setError(true);
     onEnter();
   }
   return <main className="admin-login">
@@ -29,7 +28,7 @@ function AdminLogin({ onEnter }: { onEnter: () => void }) {
           <Field label="Password" name="password" type="password" autoComplete="current-password" placeholder="••••••••" required error={error ? "Email or password is incorrect" : undefined} />
           <Button type="submit">Enter dashboard <Icon name="arrow" /></Button>
         </form>
-        <div className="prototype-note"><Icon name="spark" /><p><strong>Frontend-only credential check</strong>Vite exposes VITE_ values in browser code. Add server-side authentication before using this dashboard for sensitive data.</p></div>
+        <div className="prototype-note"><Icon name="spark" /><p><strong>{isAdminAuthConfigured ? "Frontend-only credential check" : "Admin credentials are not configured"}</strong>{isAdminAuthConfigured ? "Vite exposes VITE_ values in browser code. Add server-side authentication before using this dashboard for sensitive data." : "Set VITE_ADMIN_EMAIL and VITE_ADMIN_PASSWORD in .env for local development or in Vercel project environment variables, then restart or redeploy."}</p></div>
       </section>
     </div>
   </main>;
@@ -136,4 +135,3 @@ export default function Admin() {
   const enter = () => { sessionStorage.setItem("portfolio-admin-auth", "open"); setEntered(true); };
   return entered ? <AdminShell /> : <AdminLogin onEnter={enter} />;
 }
-
