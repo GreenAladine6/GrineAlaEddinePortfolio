@@ -1,0 +1,10 @@
+{
+  "description": "Showcase your professional profile, skills, and projects with a modern, responsive portfolio designed for final-year engineering students seeking opportunities.",
+  "robots": {
+    "index": false
+  },
+  "accessibility": {
+    "addBypassLinks": false,
+    "ignoreReducedMotion": false
+  }
+}
