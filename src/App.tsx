@@ -1,5 +1,13 @@
-import { ReactNode, useState } from "react";
-import { profile, projects, Project, skills } from "./data/portfolio";
+import { useState } from "react";
+import {
+  certifications,
+  education,
+  experiences,
+  profile,
+  projects,
+  skills,
+  type Project,
+} from "./data/portfolio";
 
 import { Button, Icon, LinkButton, Tag, IconName } from "./components/ui";
 import Admin from "./components/admin/Admin";
