@@ -60,7 +60,7 @@ export function Button({
   return <button className={`btn btn-${variant} ${className}`} {...props}>{icon && <Icon name={icon} />}{children}</button>;
 }
 
-export function LinkButton({ children, href, variant = "primary", icon, download }: { children: ReactNode; href: string; variant?: "primary" | "secondary" | "ghost"; icon?: IconName; download?: boolean }) {
+export function LinkButton({ children, href, variant = "primary", icon, download }: { children: ReactNode; href: string; variant?: "primary" | "secondary" | "ghost"; icon?: IconName; download?: boolean | string }) {
   return <a className={`btn btn-${variant}`} href={href} download={download}>{icon && <Icon name={icon} />}{children}</a>;
 }
 

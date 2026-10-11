@@ -1,6 +1,8 @@
 import { FormEvent, useState } from "react";
+import type { ChangeEvent } from "react";
 import type { Experience, Project, ProjectCategory } from "../../data/portfolio";
 import { Button, Field, Icon, TextareaField } from "../ui";
+import { usePortfolioContent } from "../../context/PortfolioContext";
 
 function FormHeader({ title, copy, onClose }: { title: string; copy: string; onClose: () => void }) {
   return <div className="form-header"><button onClick={onClose}><Icon name="arrow" />Back to content</button><span className="eyebrow">Content editor</span><h1>{title}</h1><p>{copy}</p></div>;
@@ -98,8 +100,82 @@ function ProjectForm({ project, onClose, onSave }: { project: Project | null; on
   </>;
 }
 
-function ExperienceForm({ experience, onClose, onSave }: { experience: Experience | null; onClose: () => void; onSave: (experience: Experience) => void }) {
+interface ExperienceImageDraft {
+  id: string;
+  src: string;
+  alt: string;
+  preview?: string;
+}
+
+function filePreview(file: File) {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => typeof reader.result === "string" ? resolve(reader.result) : reject(new Error("Could not preview image."));
+    reader.onerror = () => reject(reader.error ?? new Error("Could not preview image."));
+    reader.readAsDataURL(file);
+  });
+}
+
+function ExperienceForm({ experience, onClose, onSave, onUploadImage, onRemoveImage }: {
+  experience: Experience | null;
+  onClose: () => void;
+  onSave: (experience: Experience) => void;
+  onUploadImage: (id: string, file: File) => Promise<void>;
+  onRemoveImage: (id: string) => Promise<void>;
+}) {
+  const { experienceImageUrls } = usePortfolioContent();
   const [formError, setFormError] = useState("");
+  const [images, setImages] = useState<ExperienceImageDraft[]>(() => (experience?.images ?? []).map((image, index) => ({
+    ...image,
+    id: image.id ?? `${experience?.id ?? "experience"}-image-${index}`,
+  })));
+  const [imageUrl, setImageUrl] = useState("");
+  const [imageAlt, setImageAlt] = useState("");
+  const [uploading, setUploading] = useState(false);
+
+  function addImageUrl() {
+    const src = imageUrl.trim();
+    const alt = imageAlt.trim();
+    if (!/^(https?:\/\/|\/).+/.test(src)) return setFormError("Enter an https:// image URL or a path beginning with /.");
+    if (!alt) return setFormError("Add a short description for the image so it has useful alt text.");
+    setImages((current) => [...current, { id: newId("experience-image"), src, alt }]);
+    setImageUrl("");
+    setImageAlt("");
+    setFormError("");
+  }
+
+  async function uploadFiles(event: ChangeEvent<HTMLInputElement>) {
+    const input = event.currentTarget;
+    const files = Array.from(input.files ?? []);
+    if (!files.length) return;
+    setUploading(true);
+    setFormError("");
+    try {
+      const uploaded = await Promise.all(files.map(async (file) => {
+        if (!file.type.startsWith("image/")) throw new Error(`${file.name} is not an image.`);
+        if (file.size > 8 * 1024 * 1024) throw new Error(`${file.name} is larger than 8 MB.`);
+        const id = newId("experience-image");
+        const preview = await filePreview(file);
+        await onUploadImage(id, file);
+        return { id, src: `local:${id}`, alt: file.name.replace(/\.[^.]+$/, "") || "Experience photo", preview };
+      }));
+      setImages((current) => [...current, ...uploaded]);
+    } catch (error) {
+      setFormError(error instanceof Error ? error.message : "Could not upload the image.");
+    } finally {
+      setUploading(false);
+      input.value = "";
+    }
+  }
+
+  function removeImage(image: ExperienceImageDraft) {
+    setImages((current) => current.filter((item) => item.id !== image.id));
+    if (image.src.startsWith("local:")) void onRemoveImage(image.id).catch(() => setFormError("Could not remove the stored image file."));
+  }
+
+  function updateImageAlt(id: string, alt: string) {
+    setImages((current) => current.map((image) => image.id === id ? { ...image, alt } : image));
+  }
 
   function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -112,13 +188,10 @@ function ExperienceForm({ experience, onClose, onSave }: { experience: Experienc
         return;
       }
     }
+    if (images.some((image) => !image.alt.trim())) return setFormError("Add an accessible description for each image.");
+
     const startDate = String(values.get("startDate") || "");
     const endDate = String(values.get("endDate") || "");
-    const images = String(values.get("images") || "").split(/\r?\n/).map((line) => line.trim()).filter(Boolean).map((line) => {
-      const [src, ...altParts] = line.split("|").map((part) => part.trim());
-      return { src, alt: altParts.join(" | ") || `Photo for ${String(values.get("organization") || "experience")}` };
-    });
-
     onSave({
       id: experience?.id ?? newId("experience"),
       role: String(values.get("role") || "").trim(),
@@ -131,13 +204,13 @@ function ExperienceForm({ experience, onClose, onSave }: { experience: Experienc
       technologies: listFromField(values.get("technologies")),
       website: website || undefined,
       projectUrl: projectUrl || undefined,
-      images: images.length ? images : undefined,
+      images: images.length ? images.map(({ preview: _preview, ...image }) => image) : undefined,
       order: Number(values.get("order") || 1),
     });
   }
 
   return <>
-    <FormHeader title={experience ? "Edit experience" : "Add experience"} copy="Capture the role, dates, work, technologies, and public references shown in your timeline." onClose={onClose} />
+    <FormHeader title={experience ? "Edit experience" : "Add experience"} copy="Capture the role, dates, work, technologies, links, and photos shown in your timeline." onClose={onClose} />
     <form className="editor-form" onSubmit={save}>
       <section className="form-section">
         <div><h2>Role and organization</h2><p>These details identify the position in your experience timeline.</p></div>
@@ -154,11 +227,20 @@ function ExperienceForm({ experience, onClose, onSave }: { experience: Experienc
         </div>
       </section>
       <section className="form-section">
-        <div><h2>Links and photos</h2><p>Provide clickable references and optional experience images.</p></div>
+        <div><h2>Links and photos</h2><p>Add organization and project links, then upload or link one or more photos.</p></div>
         <div className="form-grid">
           <Field label="Organization website" name="website" type="url" placeholder="https://company.com" defaultValue={experience?.website ?? ""} />
           <Field label="Related project website" name="projectUrl" type="url" placeholder="https://project.com" defaultValue={experience?.projectUrl ?? ""} />
-          <div className="full"><TextareaField label="Photos (one per line)" name="images" rows={4} placeholder="/images/team-photo.jpg | Team at the project event" defaultValue={experience?.images?.map((image) => `${image.src} | ${image.alt}`).join("\n") ?? ""} /><small className="field-hint">Use `image URL or path | accessible image description` for each line.</small></div>
+          <div className="full photo-manager">
+            <div className="photo-manager-heading"><div><strong>Experience photos</strong><small>{images.length} {images.length === 1 ? "image" : "images"} · images are arranged automatically in the public gallery</small></div>
+              <label className={`btn btn-secondary upload-button ${uploading ? "is-uploading" : ""}`}><Icon name="plus" />{uploading ? "Uploading…" : "Upload images"}<input type="file" accept="image/*" multiple onChange={uploadFiles} disabled={uploading} /></label>
+            </div>
+            <div className="photo-url-row"><Field label="Image URL or public path" value={imageUrl} onChange={(event) => setImageUrl(event.target.value)} placeholder="https://... or /images/photo.jpg" /><Field label="Image description" value={imageAlt} onChange={(event) => setImageAlt(event.target.value)} placeholder="Describe the photo" /><Button type="button" variant="secondary" onClick={addImageUrl}>Add link</Button></div>
+            {images.length > 0 ? <div className={`image-upload-grid gallery-count-${Math.min(images.length, 4)}`}>{images.map((image, index) => {
+              const src = image.preview ?? (image.src.startsWith("local:") ? experienceImageUrls[image.id] : image.src);
+              return <article className="image-upload-card" key={image.id}><div className="image-upload-preview">{src ? <img src={src} alt="" /> : <span>Image is loading…</span>}<button type="button" onClick={() => removeImage(image)} aria-label={`Remove image ${index + 1}`}><Icon name="close" size={15} /></button></div><label className="field"><span>Image description</span><input value={image.alt} onChange={(event) => updateImageAlt(image.id, event.target.value)} /></label></article>;
+            })}</div> : <div className="photo-empty-state">No photos added yet. Upload images or add them with a URL.</div>}
+          </div>
         </div>
       </section>
       {formError && <p className="form-error" role="alert">{formError}</p>}
@@ -166,6 +248,5 @@ function ExperienceForm({ experience, onClose, onSave }: { experience: Experienc
     </form>
   </>;
 }
-
 
 export { ProjectForm, ExperienceForm };

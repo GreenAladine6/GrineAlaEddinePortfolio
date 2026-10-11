@@ -1,8 +1,9 @@
 import { FormEvent, useState } from "react";
-import type { Experience, Project } from "../../data/portfolio";
+import type { Certification, Education, Experience, Project, SkillGroup } from "../../data/portfolio";
 import { Button, EmptyState, Field, Icon, IconName, Tag, TextareaField } from "../ui";
 import { isAdminAuthConfigured, verifyAdminCredentials } from "../../config/adminAuth";
 import { usePortfolioContent } from "../../context/PortfolioContext";
+import { CertificationForm, EducationForm, ProfileForm, SkillGroupForm } from "./ReferenceForms";
 import { ExperienceForm, ProjectForm } from "./ContentForms";
 
 type AdminPage = "Overview" | "Projects" | "Experience" | "Skills" | "Education" | "Certifications" | "Profile";
@@ -35,13 +36,13 @@ function AdminLogin({ onEnter }: { onEnter: () => void }) {
 }
 
 function AdminShell() {
-  const { saveProject, deleteProject, saveExperience, deleteExperience } = usePortfolioContent();
+  const { saveProject, deleteProject, saveExperience, deleteExperience, uploadExperienceImage, removeExperienceImage } = usePortfolioContent();
   const [page, setPage] = useState<AdminPage>("Overview");
   const [mobileNav, setMobileNav] = useState(false);
   const [editor, setEditor] = useState<"project" | "experience" | null>(null);
   const [editingProject, setEditingProject] = useState<Project | null>(null);
   const [editingExperience, setEditingExperience] = useState<Experience | null>(null);
-  const [deleteItem, setDeleteItem] = useState<{ type: "project" | "experience"; id: string; title: string } | null>(null);
+  const [deleteItem, setDeleteItem] = useState<{ title: string; onConfirm: () => void } | null>(null);
   const pages: { name: AdminPage; icon: IconName }[] = [
     { name: "Overview", icon: "grid" }, { name: "Projects", icon: "layers" }, { name: "Experience", icon: "briefcase" },
     { name: "Skills", icon: "code" }, { name: "Education", icon: "spark" }, { name: "Certifications", icon: "check" }, { name: "Profile", icon: "user" },
@@ -49,11 +50,10 @@ function AdminShell() {
   const navigate = (name: AdminPage) => { setPage(name); setMobileNav(false); setEditor(null); setEditingProject(null); setEditingExperience(null); };
   const editProject = (project: Project) => { setEditingProject(project); setEditor("project"); };
   const editExperience = (experience: Experience) => { setEditingExperience(experience); setEditor("experience"); };
-  const requestDelete = (type: "project" | "experience", id: string, title: string) => setDeleteItem({ type, id, title });
+  const requestDelete = (title: string, onConfirm: () => void) => setDeleteItem({ title, onConfirm });
   const confirmDelete = () => {
     if (!deleteItem) return;
-    if (deleteItem.type === "project") deleteProject(deleteItem.id);
-    else deleteExperience(deleteItem.id);
+    deleteItem.onConfirm();
     setDeleteItem(null);
   };
   return <div className="admin-app">
@@ -65,11 +65,11 @@ function AdminShell() {
     <div className="admin-main">
       <header className="admin-header"><Button variant="ghost" className="admin-menu" onClick={() => setMobileNav(true)} icon="menu" aria-label="Open navigation" /><div className="admin-search"><Icon name="search" /><input placeholder="Search content..." aria-label="Search dashboard content" /></div><a href="/" className="view-site">View portfolio <Icon name="external" /></a><div className="admin-avatar"><img src="/images/ala-eddine-grine.jpg" alt="Ala Eddine Grine" /></div></header>
       <main className="admin-content">
-        {editor === "project" ? <ProjectForm key={editingProject?.id ?? "new-project"} project={editingProject} onClose={() => setEditor(null)} onSave={(project) => { saveProject(project); setEditor(null); setEditingProject(null); }} /> : editor === "experience" ? <ExperienceForm key={editingExperience?.id ?? "new-experience"} experience={editingExperience} onClose={() => setEditor(null)} onSave={(experience) => { saveExperience(experience); setEditor(null); setEditingExperience(null); }} /> : <>
+        {editor === "project" ? <ProjectForm key={editingProject?.id ?? "new-project"} project={editingProject} onClose={() => setEditor(null)} onSave={(project) => { saveProject(project); setEditor(null); setEditingProject(null); }} /> : editor === "experience" ? <ExperienceForm key={editingExperience?.id ?? "new-experience"} experience={editingExperience} onClose={() => setEditor(null)} onSave={(experience) => { saveExperience(experience); setEditor(null); setEditingExperience(null); }} onUploadImage={uploadExperienceImage} onRemoveImage={removeExperienceImage} /> : <>
           <div className="admin-title"><div><span className="eyebrow">Content workspace</span><h1>{page}</h1><p>{page === "Overview" ? "A clear view of your portfolio content and local activity." : `Review and organize your ${page.toLowerCase()} content.`}</p></div>
           {page === "Projects" && <Button icon="plus" onClick={() => { setEditingProject(null); setEditor("project"); }}>Add project</Button>}
           {page === "Experience" && <Button icon="plus" onClick={() => { setEditingExperience(null); setEditor("experience"); }}>Add experience</Button>}</div>
-          {page === "Overview" ? <AdminOverview onNavigate={navigate} /> : page === "Projects" ? <AdminProjects onEdit={editProject} onDelete={(id, title) => requestDelete("project", id, title)} /> : page === "Experience" ? <AdminExperience onEdit={editExperience} onDelete={(id, title) => requestDelete("experience", id, title)} /> : <AdminSimplePage page={page} />}
+          {page === "Overview" ? <AdminOverview onNavigate={navigate} /> : page === "Projects" ? <AdminProjects onEdit={editProject} onDelete={(id, title) => requestDelete(title, () => deleteProject(id))} /> : page === "Experience" ? <AdminExperience onEdit={editExperience} onDelete={(id, title) => requestDelete(title, () => deleteExperience(id))} /> : <AdminSimplePage page={page} onRequestDelete={requestDelete} />}
         </>}
       </main>
     </div>
@@ -105,15 +105,56 @@ function AdminExperience({ onEdit, onDelete }: { onEdit: (experience: Experience
   return <section className="admin-panel management-panel"><div className="data-list">{experiences.map((item) => <article key={item.id}><div className="list-thumb company-thumb">{item.organization.slice(0, 2).toUpperCase()}</div><div className="list-primary"><strong>{item.role}</strong><small>{item.organization} · {item.startDate}</small><div className="tags">{item.technologies.slice(0, 3).map((tech) => <Tag key={tech}>{tech}</Tag>)}</div></div><div className="row-actions"><Button variant="ghost" icon="edit" onClick={() => onEdit(item)} aria-label={`Edit ${item.role}`} /><Button variant="ghost" icon="trash" onClick={() => onDelete(item.id, item.role)} aria-label={`Delete ${item.role}`} /></div></article>)}</div></section>;
 }
 
-function AdminSimplePage({ page }: { page: Exclude<AdminPage, "Overview" | "Projects" | "Experience"> }) {
-  const { content: { skills, education, certifications, profile } } = usePortfolioContent();
-  const content: Record<string, { title: string; subtitle: string }[]> = {
-    Skills: skills.map((item) => ({ title: item.category, subtitle: `${item.skills.length} skills · ${item.skills.slice(0, 3).join(", ")}` })),
-    Education: education.map((item) => ({ title: item.institution, subtitle: item.program })),
-    Certifications: certifications.map((item) => ({ title: item.name, subtitle: item.organization })),
-    Profile: [{ title: profile.name, subtitle: `${profile.headline} · ${profile.email}` }],
-  };
-  return <section className="admin-panel management-panel"><div className="panel-head"><div><h2>{page === "Profile" ? "Public profile" : `${page} entries`}</h2><p>Other content sections are displayed from the portfolio data.</p></div></div><div className="simple-list">{content[page].map((item) => <div key={item.title}><span><Icon name={page === "Certifications" ? "check" : page === "Profile" ? "user" : "code"} /></span><div><strong>{item.title}</strong><small>{item.subtitle}</small></div></div>)}</div>{page === "Profile" && <div className="inline-note"><Icon name="spark" />Profile, skills, education, and certifications are not editable in this dashboard yet.</div>}</section>;
+function AdminSimplePage({ page, onRequestDelete }: {
+  page: Exclude<AdminPage, "Overview" | "Projects" | "Experience">;
+  onRequestDelete: (title: string, onConfirm: () => void) => void;
+}) {
+  const {
+    content: { skills, education, certifications, profile },
+    cvUrl,
+    saveSkillGroup, deleteSkillGroup,
+    saveEducation, deleteEducation,
+    saveCertification, deleteCertification,
+    uploadCertificationImage, removeCertificationImage,
+    updateProfile, uploadCv, deleteCv,
+  } = usePortfolioContent();
+  const [editing, setEditing] = useState<SkillGroup | Education | Certification | null>(null);
+  const [showEditor, setShowEditor] = useState(false);
+
+  function closeEditor() {
+    setShowEditor(false);
+    setEditing(null);
+  }
+
+  if (page === "Profile") {
+    if (showEditor) return <ProfileForm value={profile} cvUrl={cvUrl} onSave={updateProfile} onUploadCv={uploadCv} onRemoveCv={deleteCv} onClose={closeEditor} />;
+    return <section className="admin-panel management-panel"><div className="panel-head"><div><h2>Public profile and CV</h2><p>Update your profile details and upload a PDF for the portfolio download buttons.</p></div><Button icon="edit" onClick={() => setShowEditor(true)}>Edit profile & CV</Button></div><div className="simple-list"><div><span><Icon name="user" /></span><div><strong>{profile.name}</strong><small>{profile.headline} · {profile.email}</small></div></div><div><span><Icon name="download" /></span><div><strong>{cvUrl ? "Uploaded CV PDF" : profile.cv ? "External CV link" : "No CV uploaded"}</strong><small>{cvUrl ? "Saved in this browser's file storage" : profile.cv || "Upload a PDF to enable Download CV buttons"}</small></div></div></div><div className="inline-note"><Icon name="spark" />The uploaded PDF is stored in this browser. Other visitors and devices need a server upload service to access it.</div></section>;
+  }
+
+  if (showEditor) {
+    if (page === "Skills") return <SkillGroupForm value={editing as SkillGroup | null} onClose={closeEditor} onSave={(item) => { saveSkillGroup(item, (editing as SkillGroup | null)?.category); closeEditor(); }} />;
+    if (page === "Education") return <EducationForm value={editing as Education | null} onClose={closeEditor} onSave={(item) => { saveEducation(item, (editing as Education | null)?.institution); closeEditor(); }} />;
+    return <CertificationForm key={(editing as Certification | null)?.id ?? "new-certification"} value={editing as Certification | null} onClose={closeEditor} onSave={(item) => { saveCertification(item, (editing as Certification | null)?.id); closeEditor(); }} onUploadImage={uploadCertificationImage} onRemoveImage={removeCertificationImage} />;
+  }
+
+  const isSkills = page === "Skills";
+  const isEducation = page === "Education";
+  const items = isSkills
+    ? skills.map((item) => ({ key: item.category, title: item.category, subtitle: `${item.skills.length} skills · ${item.skills.join(", ")}`, value: item }))
+    : isEducation
+      ? education.map((item) => ({ key: item.institution, title: item.institution, subtitle: `${item.program} · ${item.startDate} — ${item.endDate}`, value: item }))
+      : certifications.map((item) => ({ key: item.id ?? item.name, title: item.name, subtitle: `${item.organization}${item.date ? ` · ${item.date}` : ""}${item.credentialUrl ? " · Proof link added" : ""}`, value: item }));
+  const icon: IconName = page === "Certifications" ? "check" : "code";
+  const noun = page === "Skills" ? "skill group" : page === "Education" ? "education entry" : "certification";
+
+  return <section className="admin-panel management-panel">
+    <div className="panel-head"><div><h2>{page} entries</h2><p>Add, edit, or remove items shown in the public portfolio.</p></div><Button icon="plus" onClick={() => { setEditing(null); setShowEditor(true); }}>Add {noun}</Button></div>
+    <div className="simple-list">{items.length ? items.map((item) => <div key={item.key}><span><Icon name={icon} /></span><div><strong>{item.title}</strong><small>{item.subtitle}</small></div><div className="row-actions"><Button variant="ghost" icon="edit" onClick={() => { setEditing(item.value); setShowEditor(true); }} aria-label={`Edit ${item.title}`} /><Button variant="ghost" icon="trash" onClick={() => onRequestDelete(item.title, () => {
+      if (isSkills) deleteSkillGroup(item.key);
+      else if (isEducation) deleteEducation(item.key);
+      else deleteCertification(item.key);
+    })} aria-label={`Delete ${item.title}`} /></div></div>) : <EmptyState title={`No ${page.toLowerCase()} added`} copy={`Add a ${noun} to show it on your portfolio.`} />}</div>
+  </section>;
 }
 
 function DeleteDialog({ item, onClose, onConfirm }: { item: string; onClose: () => void; onConfirm: () => void }) {

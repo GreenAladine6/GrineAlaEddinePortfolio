@@ -31,7 +31,7 @@ export interface Experience {
   technologies: string[];
   website?: string;
   projectUrl?: string;
-  images?: { src: string; alt: string }[];
+  images?: { id?: string; src: string; alt: string }[];
   order: number;
 }
 
@@ -45,10 +45,12 @@ export interface Education {
 }
 
 export interface Certification {
+  id?: string;
   name: string;
   organization: string;
   date?: string;
   credentialUrl?: string;
+  image?: string;
 }
 
 export interface SkillGroup {

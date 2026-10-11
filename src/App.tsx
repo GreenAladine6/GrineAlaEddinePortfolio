@@ -15,7 +15,7 @@ function PublicHeader() {
   const links = ["About", "Experience", "Projects", "Skills", "Education", "Contact"];
   return <header className="site-header">
     <div className="nav-shell">
-      <a className="wordmark" href="#top" aria-label="Ala Eddine Grine, home"><span><img src="/images/ala-eddine-grine.jpg" alt="" /></span><strong>Ala Eddine Grine</strong></a>
+      <a className="wordmark" href="#top" aria-label={`${profile.name}, home`}><span><img src="/images/ala-eddine-grine.jpg" alt="" /></span><strong>{profile.name}</strong></a>
       <nav className={`main-nav ${open ? "is-open" : ""}`} aria-label="Primary navigation">
         {links.map((link) => <a key={link} href={`#${link.toLowerCase()}`} onClick={() => setOpen(false)}>{link}</a>)}
         <div className="nav-mobile-actions"><span className="availability"><i />{profile.availability}</span><CvButton /></div>
@@ -27,8 +27,9 @@ function PublicHeader() {
 }
 
 function CvButton({ secondary = false }: { secondary?: boolean }) {
-  const { content: { profile } } = usePortfolioContent();
-  if (profile.cv) return <LinkButton href={profile.cv} download variant={secondary ? "secondary" : "primary"} icon="download">Download CV</LinkButton>;
+  const { content: { profile }, cvUrl } = usePortfolioContent();
+  const cvHref = cvUrl || profile.cv;
+  if (cvHref) return <LinkButton href={cvHref} download={cvUrl ? "Ala-Eddine-Grine-CV.pdf" : true} variant={secondary ? "secondary" : "primary"} icon="download">Download CV</LinkButton>;
   return <a className={`btn btn-${secondary ? "secondary" : "primary"}`} href={`mailto:${profile.email}?subject=CV request`}><Icon name="download" />Request CV</a>;
 }
 
@@ -39,7 +40,7 @@ function HeroVisual() {
     <div className="visual-grid" />
     <div className="portrait-frame">
       <img src="/images/ala-eddine-grine.jpg" alt="Ala Eddine Grine" />
-      <div className="portrait-caption"><span>Ala Eddine Grine</span><strong>Computer Engineering · ENSIT</strong></div>
+      <div className="portrait-caption"><span>{profile.name}</span><strong>{profile.headline}</strong></div>
     </div>
     <div className="system-card"><span className="mini-icon"><Icon name="briefcase" /></span><div><small>EXPERIENCE</small><strong>Project Manager · ENSIT JE</strong></div></div>
     <div className="status-card"><span><i /> Available for PFE</span><strong>2026</strong></div>
@@ -70,7 +71,7 @@ function ProjectCard({ project }: { project: Project }) {
 }
 
 function Portfolio() {
-  const { content } = usePortfolioContent();
+  const { content, certificationImageUrls, experienceImageUrls } = usePortfolioContent();
   const { profile, projects, experiences, skills, education, certifications } = content;
   const [filter, setFilter] = useState("All");
   const categories = ["All", "Web Development", "AI & Machine Learning", "Multi-Agent Systems", "DevOps & MLOps"];
@@ -82,9 +83,9 @@ function Portfolio() {
       <section className="hero">
         <div className="container hero-grid">
           <div className="hero-copy hero-story-card">
-            <div className="hero-kicker"><span className="availability"><i />{profile.availability}</span><span>Based in Tunis</span></div>
-            <h1>Building intelligent software. <em>Turning ideas into impact.</em></h1>
-            <p className="hero-lead">I’m Ala Eddine Grine, a final-year Computer Engineering student at ENSIT, passionate about software engineering, AI-powered applications, multi-agent systems, and cloud technologies.</p>
+            <div className="hero-kicker"><span className="availability"><i />{profile.availability}</span><span>Based in {profile.location}</span></div>
+            <h1>{profile.heroHeadline}</h1>
+            <p className="hero-lead">{profile.about}</p>
             <div className="hero-actions"><LinkButton href="#projects" icon="arrow">Explore my projects</LinkButton><CvButton secondary /></div>
             <div className="hero-meta">
               <span><Icon name="location" />Tunis, Tunisia</span>
@@ -134,11 +135,14 @@ function Portfolio() {
                 <p>{experience.description}</p><div className="tags">{experience.technologies.map((tech) => <Tag key={tech}>{tech}</Tag>)}</div>
                 {experience.responsibilities && experience.responsibilities.length > 0 && <ul className="experience-responsibilities">{experience.responsibilities.map((item) => <li key={item}>{item}</li>)}</ul>}
                 {(experience.website || experience.projectUrl) && <div className="experience-links">{experience.website && <a href={experience.website} target="_blank" rel="noreferrer">Organization website <Icon name="external" size={14} /></a>}{experience.projectUrl && <a href={experience.projectUrl} target="_blank" rel="noreferrer">Related project <Icon name="external" size={14} /></a>}</div>}
-                {experience.images && <div className="experience-gallery">
-                  {experience.images.map((image, imageIndex) => <figure className={imageIndex === 0 ? "gallery-featured" : ""} key={image.src}>
-                    <img src={image.src} alt={image.alt} loading="lazy" />
-                    {imageIndex === 0 && <figcaption><span>ENSIT Junior Enterprise</span><strong>Project Manager</strong></figcaption>}
-                  </figure>)}
+                {experience.images && experience.images.length > 0 && <div className={`experience-gallery gallery-count-${Math.min(experience.images.length, 4)}`}>
+                  {experience.images.map((image, imageIndex) => {
+                    const src = image.src.startsWith("local:") ? experienceImageUrls[image.id ?? ""] : image.src;
+                    return <figure className={imageIndex === 0 ? "gallery-featured" : ""} key={image.id ?? image.src}>
+                      {src && <img src={src} alt={image.alt} loading="lazy" />}
+                      {imageIndex === 0 && <figcaption><span>{experience.organization}</span><strong>{experience.role}</strong></figcaption>}
+                    </figure>;
+                  })}
                 </div>}
               </div>
             </article>)}
@@ -166,10 +170,13 @@ function Portfolio() {
       <section id="education" className="section">
         <div className="container education-layout">
           <div><SectionHeading eyebrow="Education" title="Foundations for what’s next" />
-            <div className="education-list">{education.map((item) => <article key={item.institution}><span className="education-dot" /><div><span className="date-label">{item.startDate} — {item.endDate}</span><h3>{item.institution}</h3><p>{item.program}</p><small><Icon name="location" size={14} />{item.location}</small></div></article>)}</div>
+            <div className="education-list">{education.map((item) => <article key={item.institution}><span className="education-dot" /><div><span className="date-label">{item.startDate} — {item.endDate}</span><h3>{item.institution}</h3><p>{item.program}</p>{item.description && <p>{item.description}</p>}<small><Icon name="location" size={14} />{item.location}</small></div></article>)}</div>
           </div>
           <div><SectionHeading eyebrow="Certifications" title="Continuous learning" />
-            <div className="cert-grid">{certifications.map((cert, index) => <article key={cert.name}><span className="cert-icon"><Icon name="check" /></span><div><small>0{index + 1} · {cert.organization}</small><h3>{cert.name}</h3></div></article>)}</div>
+            <div className="cert-grid">{certifications.map((cert, index) => {
+              const certImage = cert.image?.startsWith("local:") ? certificationImageUrls[cert.id ?? ""] : cert.image;
+              return <article key={cert.id ?? cert.name}><span className="cert-icon">{certImage ? <img src={certImage} alt={`${cert.name} certificate`} loading="lazy" /> : <Icon name="check" />}</span><div><small>0{index + 1} · {cert.organization}</small><h3>{cert.credentialUrl ? <a href={cert.credentialUrl} target="_blank" rel="noreferrer">{cert.name} <Icon name="external" size={13} /></a> : cert.name}</h3>{cert.date && <small>{cert.date}</small>}</div></article>;
+            })}</div>
           </div>
         </div>
       </section>
